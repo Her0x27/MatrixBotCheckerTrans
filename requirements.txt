@@ -1,0 +1,4 @@
+mautrix
+requests
+python-i18n
+python-dotenv
