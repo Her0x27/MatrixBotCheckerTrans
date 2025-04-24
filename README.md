@@ -64,7 +64,7 @@ curl -X POST -d '{"type":"m.login.password", "user":"YOUR_USERNAME", "password":
    - `/en` - переключиться на английский язык
 
 ## Примеры адресов для тестирования
-
+```
 - Bitcoin: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
 - Ethereum: 0xde0b295669a9fd93d5f28d9ec85e40f4cb697bae
 - Litecoin: LM2WMpR1Rp6j3Sa59cMXMs1SPzj9eXpGc1
