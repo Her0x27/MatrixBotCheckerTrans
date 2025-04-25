@@ -6,10 +6,9 @@ import json
 import os
 import requests
 import i18n
-from mautrix.client import Client
+from mautrix.client import ClientAPI
 from mautrix.types import EventType, MessageType
 from mautrix.errors import MNotFound
-from mautrix.client.api.base import BaseClientAPI
 from dotenv import load_dotenv
 
 # Загружаем переменные окружения из .env файла
@@ -41,48 +40,9 @@ API_KEYS = {
     'trongrid': os.getenv('TRONGRID_API_KEY', ''),
 }
 
-class FixedClient(Client):
-    """A subclass of Client that fixes the user ID parsing issue."""
-    
-    def parse_user_id(self, user_id):
-        """Override the parse_user_id method to handle the @ prefix properly."""
-        if not user_id.startswith('@'):
-            raise ValueError("User IDs start with @")
-        
-        parts = user_id[1:].split(':', 1)
-        if len(parts) != 2:
-            raise ValueError("User IDs must have a domain part")
-        
-        return parts[0], parts[1]
-
 class CryptoCheckerBot:
-    def __init__(self, homeserver, user_id, access_token):
-        # Проверяем, что user_id начинается с @
-        logger.info(f"Initializing bot with user_id: '{user_id}'")
-        
-        if not user_id.startswith('@'):
-            logger.warning(f"User ID doesn't start with @: '{user_id}'")
-            user_id = f"@{user_id}"
-            logger.info(f"Added @ prefix to user_id: '{user_id}'")
-        
-        # Ensure the user_id is properly formatted
-        user_id = user_id.strip()
-        
-        # Additional validation
-        if ':' not in user_id:
-            raise ValueError(f"Invalid user ID format. Expected format: @localpart:domain, got: {user_id}")
-        
-        logger.info(f"Creating client with homeserver: {homeserver}, user_id: '{user_id}'")
-        
-        try:
-            # Use our fixed client class instead of the original Client
-            self.client = FixedClient(homeserver, user_id)
-            logger.info("Client created successfully")
-        except Exception as e:
-            logger.error(f"Error creating client: {e}")
-            raise
-        
-        self.access_token = access_token
+    def __init__(self, user_id, homeserver, access_token):
+        self.client = ClientAPI(user_id, base_url=homeserver, token=access_token)
         self.user_languages = {}
         self.crypto_apis = {
             'bitcoin': self.check_bitcoin,
@@ -94,26 +54,25 @@ class CryptoCheckerBot:
             'dogecoin': self.check_dogecoin,
         }
 
-    async def login(self):
-        """Авторизация бота по токену"""
-        try:
-            # Используем токен доступа вместо логина/пароля
-            self.client.access_token = self.access_token
-            whoami = await self.client.whoami()
-            logger.info(f"Logged in as {whoami.user_id}")
-        except Exception as e:
-            logger.error(f"Failed to log in: {e}")
-            raise
-
     async def start(self):
         """Запуск бота"""
-        await self.login()
-        
-        # Регистрация обработчика сообщений
-        self.client.add_event_handler(EventType.ROOM_MESSAGE, self.handle_message)
-        
-        # Синхронизация с сервером
-        await self.client.sync_forever(timeout=30000)
+        try:
+            # Проверяем, что мы успешно авторизованы
+            whoami = await self.client.whoami()
+            logger.info(f"Logged in as {whoami.user_id}")
+            
+            # Получаем список комнат, в которых состоит бот
+            joined_rooms = await self.client.get_joined_rooms()
+            logger.info(f"Bot is in {len(joined_rooms)} rooms")
+            
+            # Регистрация обработчика сообщений
+            self.client.add_event_handler(EventType.ROOM_MESSAGE, self.handle_message)
+            
+            # Синхронизация с сервером
+            await self.client.sync_forever(timeout=30000)
+        except Exception as e:
+            logger.error(f"Error starting bot: {e}")
+            raise
 
     async def handle_message(self, event):
         """Обработка входящих сообщений"""
@@ -328,38 +287,19 @@ class CryptoCheckerBot:
 
     def get_user_language(self, user_id):
         """Получение языка пользователя"""
-
         return self.user_languages.get(user_id, 'ru')  # По умолчанию русский
 
 async def main():
     # Параметры подключения к Matrix серверу
-    homeserver = os.getenv("MATRIX_HOMESERVER")
-    user_id = os.getenv("MATRIX_USER_ID")
-    access_token = os.getenv("MATRIX_ACCESS_TOKEN")
+    homeserver = os.getenv("MATRIX_HOMESERVER", "https://matrix.org")
+    user_id = os.getenv("MATRIX_USER_ID", "")  # Должен быть в формате @username:server.org
+    access_token = os.getenv("MATRIX_ACCESS_TOKEN", "")
     
-    # Выводим значения для отладки
-    logger.info(f"Homeserver: {homeserver}")
-    logger.info(f"User ID: {user_id}")
-    logger.info(f"Access Token: {'*' * 10 if access_token else 'Not set'}")
-    
-    if not user_id or not access_token or not homeserver:
-        logger.error("Matrix homeserver, user_id or access_token not set")
+    if not user_id or not access_token:
+        logger.error("Matrix user_id or access_token not set")
         return
     
-    # Ensure user_id is properly formatted
-    user_id = user_id.strip()
-    if not user_id.startswith('@'):
-        user_id = f"@{user_id}"
-    
-    logger.info(f"Using User ID: '{user_id}'")
-    
-    # Create a client directly and set the access token
-    client = Client(homeserver)
-    client.access_token = access_token
-    client.mxid = user_id  # Set the user ID directly
-    
-    # Create the bot with the pre-configured client
-    bot = CryptoCheckerBot(client)
+    bot = CryptoCheckerBot(user_id, homeserver, access_token)
     await bot.start()
 
 if __name__ == "__main__":
