@@ -40,9 +40,12 @@ API_KEYS = {
     'trongrid': os.getenv('TRONGRID_API_KEY', ''),
 }
 
-class CryptoCheckerBot:
-    def __init__(self, homeserver, access_token):
-        self.client = Client(homeserver)
+def __init__(self, homeserver, user_id, access_token):
+        # Проверяем, что user_id начинается с @
+        if not user_id.startswith('@'):
+            raise ValueError(f"User ID must start with @, got: {user_id}")
+            
+        self.client = Client(homeserver, user_id)
         self.access_token = access_token
         self.user_languages = {}
         self.crypto_apis = {
