@@ -294,14 +294,25 @@ class CryptoCheckerBot:
 
 async def main():
     # Параметры подключения к Matrix серверу
-    homeserver = os.getenv("MATRIX_HOMESERVER", "https://matrix.org")
-    access_token = os.getenv("MATRIX_ACCESS_TOKEN", "")
+    homeserver = os.getenv("MATRIX_HOMESERVER")
+    user_id = os.getenv("MATRIX_USER_ID")
+    access_token = os.getenv("MATRIX_ACCESS_TOKEN")
     
-    if not access_token:
-        logger.error("Matrix access token not set")
+    # Выводим значения для отладки
+    logger.info(f"Homeserver: {homeserver}")
+    logger.info(f"User ID: {user_id}")
+    logger.info(f"Access Token: {'*' * 10 if access_token else 'Not set'}")
+    
+    if not user_id or not access_token or not homeserver:
+        logger.error("Matrix homeserver, user_id or access_token not set")
         return
     
-    bot = CryptoCheckerBot(homeserver, access_token)
+    # Проверяем, что user_id начинается с @
+    if not user_id.startswith('@'):
+        logger.error(f"User ID must start with @, got: {user_id}")
+        return
+    
+    bot = CryptoCheckerBot(homeserver, user_id, access_token)
     await bot.start()
 
 if __name__ == "__main__":
