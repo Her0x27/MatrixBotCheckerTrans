@@ -42,22 +42,41 @@ API_KEYS = {
 
 class CryptoCheckerBot:
    def __init__(self, homeserver, user_id, access_token):
-        # Проверяем, что user_id начинается с @
-        if not user_id.startswith('@'):
-            raise ValueError(f"User ID must start with @, got: {user_id}")
-            
+    # Проверяем, что user_id начинается с @
+    logger.info(f"Initializing bot with user_id: '{user_id}'")
+    
+    if not user_id.startswith('@'):
+        logger.warning(f"User ID doesn't start with @: '{user_id}'")
+        user_id = f"@{user_id}"
+        logger.info(f"Added @ prefix to user_id: '{user_id}'")
+    
+    # Ensure the user_id is properly formatted
+    user_id = user_id.strip()
+    
+    # Additional validation
+    if ':' not in user_id:
+        raise ValueError(f"Invalid user ID format. Expected format: @localpart:domain, got: {user_id}")
+    
+    logger.info(f"Creating client with homeserver: {homeserver}, user_id: '{user_id}'")
+    
+    try:
         self.client = Client(homeserver, user_id)
-        self.access_token = access_token
-        self.user_languages = {}
-        self.crypto_apis = {
-            'bitcoin': self.check_bitcoin,
-            'ethereum': self.check_ethereum,
-            'litecoin': self.check_litecoin,
-            'tron': self.check_tron,
-            'usdt_trc20': self.check_tron_usdt,
-            'usdt_erc20': self.check_ethereum_usdt,
-            'dogecoin': self.check_dogecoin,
-        }
+        logger.info("Client created successfully")
+    except Exception as e:
+        logger.error(f"Error creating client: {e}")
+        raise
+    
+    self.access_token = access_token
+    self.user_languages = {}
+    self.crypto_apis = {
+        'bitcoin': self.check_bitcoin,
+        'ethereum': self.check_ethereum,
+        'litecoin': self.check_litecoin,
+        'tron': self.check_tron,
+        'usdt_trc20': self.check_tron_usdt,
+        'usdt_erc20': self.check_ethereum_usdt,
+        'dogecoin': self.check_dogecoin,
+    }
 
     async def login(self):
         """Авторизация бота по токену"""
@@ -314,10 +333,31 @@ async def main():
     # Проверяем, что user_id начинается с @
     if not user_id.startswith('@'):
         logger.error(f"User ID must start with @, got: {user_id}")
-        return
+        user_id = f"@{user_id}"
+        logger.info(f"Corrected User ID: {user_id}")
     
-    bot = CryptoCheckerBot(homeserver, user_id, access_token)
-    await bot.start()
+    # Ensure there are no whitespace or invisible characters
+    user_id = user_id.strip()
+    logger.info(f"Cleaned User ID: '{user_id}'")
+    
+    # Debug: Print each character's ASCII value to check for invisible characters
+    logger.info(f"User ID character codes: {[ord(c) for c in user_id]}")
+    
+    try:
+        bot = CryptoCheckerBot(homeserver, user_id, access_token)
+        await bot.start()
+    except ValueError as e:
+        logger.error(f"ValueError: {e}")
+        # Try with a manually constructed user ID as a last resort
+        if ":" in user_id:
+            parts = user_id.split(":")
+            if len(parts) >= 2:
+                localpart = parts[0].lstrip('@')
+                domain = parts[1]
+                manual_user_id = f"@{localpart}:{domain}"
+                logger.info(f"Trying with manually constructed user ID: {manual_user_id}")
+                bot = CryptoCheckerBot(homeserver, manual_user_id, access_token)
+                await bot.start()
 
 if __name__ == "__main__":
     asyncio.run(main())
